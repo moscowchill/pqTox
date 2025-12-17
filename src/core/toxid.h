@@ -16,12 +16,20 @@
 class ToxId
 {
 public:
+    // Classical address constants (38 bytes)
     static constexpr int nospamSize = 4;
     static constexpr int nospamNumHexChars = nospamSize * 2;
     static constexpr int checksumSize = 2;
     static constexpr int checksumNumHexChars = checksumSize * 2;
     static constexpr int size = 38;
     static constexpr int numHexChars = size * 2;
+
+    // Post-quantum address constants (46 bytes)
+    // PQ address format: [PK:32][MLKEMCommitment:8][NoSpam:4][Checksum:2]
+    static constexpr int mlkemCommitmentSize = 8;
+    static constexpr int mlkemCommitmentNumHexChars = mlkemCommitmentSize * 2;
+    static constexpr int sizePq = 46;
+    static constexpr int numHexCharsPq = sizePq * 2;
 
     ToxId();
     ToxId(const ToxId& other);
@@ -41,14 +49,22 @@ public:
     static bool isValidToxId(const QString& id);
     static bool isToxId(const QString& id);
     const uint8_t* getBytes() const;
+    int getSize() const;
     ToxPk getPublicKey() const;
     QString getNoSpamString() const;
+
+    // Post-quantum address methods
+    bool isPqAddress() const;
+    QByteArray getMlkemCommitment() const;
+    static bool isClassicalToxId(const QString& id);
+    static bool isPqToxId(const QString& id);
 
 private:
     void constructToxId(const QByteArray& rawId);
 
 public:
     static const QRegularExpression ToxIdRegEx;
+    static const QRegularExpression ToxIdRegExPq;
 
 private:
     QByteArray toxId;

@@ -14,13 +14,19 @@
 #include <cassert>
 #include <cstdint>
 
+// Classical address regex (76 hex chars = 38 bytes)
 const QRegularExpression
     ToxId::ToxIdRegEx(QString("(^|\\s)[A-Fa-f0-9]{%1}($|\\s)").arg(ToxId::numHexChars));
+
+// Post-quantum address regex (92 hex chars = 46 bytes)
+const QRegularExpression
+    ToxId::ToxIdRegExPq(QString("(^|\\s)[A-Fa-f0-9]{%1}($|\\s)").arg(ToxId::numHexCharsPq));
 
 /**
  * @class ToxId
  * @brief This class represents a Tox ID.
  *
+ * Classical ID (38 bytes, 76 hex chars):
  * An ID is composed of 32 bytes long public key, 4 bytes long NoSpam
  * and 2 bytes long checksum.
  *
@@ -32,6 +38,17 @@ const QRegularExpression
  * |           Public Key (PK), 32 bytes, 64 characters            /    4 bytes  |  2 bytes
  * |                                                              |  8 characters|  4 characters
  * @endcode
+ *
+ * Post-Quantum ID (46 bytes, 92 hex chars):
+ * A PQ ID adds an 8-byte ML-KEM commitment for quantum-resistant identity verification.
+ *
+ * e.g.
+ * @code
+ * | Public Key (32 bytes) | ML-KEM Commitment (8 bytes) | NoSpam (4 bytes) | Checksum (2 bytes)
+ * @endcode
+ *
+ * The ML-KEM commitment is SHA256(ML-KEM public key)[0:8], enabling verification
+ * that a peer's ML-KEM key matches their claimed identity even against quantum attackers.
  */
 
 /**
@@ -57,6 +74,7 @@ ToxId::ToxId(ToxId&& other) = default;
 /**
  * @brief Create a Tox ID from a QString.
  *
+ * Supports both classical (76 hex chars) and PQ (92 hex chars) addresses.
  * If the given rawId is not a valid Tox ID, but can be a Public Key then:
  * publicKey == rawId and noSpam == 0 == checkSum.
  * If the given rawId isn't a valid Public Key or Tox ID a ToxId with all zero bytes is created.
@@ -107,7 +125,9 @@ ToxId::ToxId(const uint8_t* rawId, int len)
 
 void ToxId::constructToxId(const QByteArray& rawId)
 {
-    if (rawId.length() == ToxId::size && isToxId(QString::fromUtf8(rawId.toHex()).toUpper())) {
+    const QString hexId = QString::fromUtf8(rawId.toHex()).toUpper();
+    // Accept both classical (38 bytes) and PQ (46 bytes) addresses
+    if ((rawId.length() == ToxId::size || rawId.length() == ToxId::sizePq) && isToxId(hexId)) {
         toxId = QByteArray(rawId); // construct from full tox id
     } else {
         assert(!"ToxId constructed with invalid input");
@@ -186,10 +206,67 @@ ToxPk ToxId::getPublicKey() const
 QString ToxId::getNoSpamString() const
 {
     if (toxId.length() == ToxId::size) {
+        // Classical: [PK:32][NoSpam:4][Checksum:2]
         return QString::fromUtf8(toxId.mid(ToxPk::size, ToxId::nospamSize).toHex()).toUpper();
+    } else if (toxId.length() == ToxId::sizePq) {
+        // PQ: [PK:32][MLKEMCommitment:8][NoSpam:4][Checksum:2]
+        return QString::fromUtf8(
+                   toxId.mid(ToxPk::size + ToxId::mlkemCommitmentSize, ToxId::nospamSize).toHex())
+            .toUpper();
     }
 
     return {};
+}
+
+/**
+ * @brief Returns the size of the ToxId in bytes.
+ * @return 38 for classical, 46 for PQ, or 0 if invalid.
+ */
+int ToxId::getSize() const
+{
+    return toxId.length();
+}
+
+/**
+ * @brief Check if this is a post-quantum address.
+ * @return True if this is a 46-byte PQ address, false otherwise.
+ */
+bool ToxId::isPqAddress() const
+{
+    return toxId.length() == ToxId::sizePq;
+}
+
+/**
+ * @brief Get the ML-KEM commitment from a PQ address.
+ * @return The 8-byte ML-KEM commitment, or empty if not a PQ address.
+ */
+QByteArray ToxId::getMlkemCommitment() const
+{
+    if (toxId.length() == ToxId::sizePq) {
+        // PQ: [PK:32][MLKEMCommitment:8][NoSpam:4][Checksum:2]
+        return toxId.mid(ToxPk::size, ToxId::mlkemCommitmentSize);
+    }
+    return {};
+}
+
+/**
+ * @brief Check if a string is a classical (38-byte) Tox ID.
+ * @param id String to check.
+ * @return True if exactly 76 hex characters.
+ */
+bool ToxId::isClassicalToxId(const QString& id)
+{
+    return id.length() == ToxId::numHexChars && id.contains(ToxIdRegEx);
+}
+
+/**
+ * @brief Check if a string is a post-quantum (46-byte) Tox ID.
+ * @param id String to check.
+ * @return True if exactly 92 hex characters.
+ */
+bool ToxId::isPqToxId(const QString& id)
+{
+    return id.length() == ToxId::numHexCharsPq && id.contains(ToxIdRegExPq);
 }
 
 /**
@@ -206,31 +283,33 @@ bool ToxId::isValidToxId(const QString& id)
 /**
  * @brief Check, that id is probably a valid Tox ID.
  * @param id Tox ID to check.
- * @return True if the string can be a ToxID, false otherwise.
+ * @return True if the string can be a ToxID (classical or PQ), false otherwise.
  * @note Doesn't validate checksum.
  */
 bool ToxId::isToxId(const QString& id)
 {
-    return id.length() == ToxId::numHexChars && id.contains(ToxIdRegEx);
+    return isClassicalToxId(id) || isPqToxId(id);
 }
 
 /**
  * @brief Check it it's a valid Tox ID by verifying the checksum
  * @return True if it is a valid Tox ID, false otherwise.
+ * @note Works for both classical (38-byte) and PQ (46-byte) addresses.
  */
 bool ToxId::isValid() const
 {
-    if (toxId.length() != ToxId::size) {
+    if (toxId.length() != ToxId::size && toxId.length() != ToxId::sizePq) {
         return false;
     }
 
-    const int pkAndChecksum = ToxPk::size + ToxId::nospamSize;
+    // Calculate how much data to checksum (everything except the checksum itself)
+    const int dataLen = toxId.length() - ToxId::checksumSize;
 
-    QByteArray data = toxId.left(pkAndChecksum);
+    QByteArray data = toxId.left(dataLen);
     const QByteArray checksum = toxId.right(ToxId::checksumSize);
     QByteArray calculated(ToxId::checksumSize, 0x00);
 
-    for (int i = 0; i < pkAndChecksum; i++) {
+    for (int i = 0; i < dataLen; i++) {
         calculated[i % 2] = calculated[i % 2] ^ data[i];
     }
 
