@@ -60,7 +60,9 @@ Core::Core(QThread* coreThread_, IBootstrapListGenerator& bootstrapListGenerator
     // need to migrate Settings and History if this changes
     assert(ToxPk::size == tox_public_key_size());
     assert(ConferenceId::size == tox_conference_id_size());
-    assert(ToxId::size == tox_address_size());
+    // Support both classical (38-byte) and PQ (46-byte) addresses
+    const size_t toxAddrSize = tox_address_size();
+    assert(toxAddrSize == ToxId::size || toxAddrSize == ToxId::sizePq);
     toxTimer->setSingleShot(true);
     connect(toxTimer, &QTimer::timeout, this, &Core::process);
     connect(coreThread_, &QThread::finished, toxTimer, &QTimer::stop);
@@ -97,6 +99,12 @@ void Core::registerCallbacks(Tox* tox)
     tox_callback_conference_peer_list_changed(tox, onConferencePeerListChange);
     tox_callback_conference_peer_name(tox, onConferencePeerNameChange);
     tox_callback_conference_title(tox, onConferenceTitleChange);
+
+#ifdef PQTOX_PQ_SUPPORT
+    // Register post-quantum identity status callback
+    tox_callback_friend_identity_status(tox, onFriendIdentityStatusChanged);
+    qDebug() << "Post-quantum toxcore callbacks registered";
+#endif
 }
 
 /**
@@ -606,6 +614,110 @@ void Core::requestFriendship(const ToxId& friendId, const QString& message)
         emit failedToAddFriend(friendPk);
     }
 }
+
+#ifdef PQTOX_PQ_SUPPORT
+/**
+ * @brief Sends a friend request using a 46-byte PQ address.
+ * @param friendId The post-quantum ToxId of the friend to add.
+ * @param message The friend request message.
+ *
+ * This uses the tox_friend_add_pq() API which stores the ML-KEM commitment
+ * from the address for later identity verification.
+ */
+void Core::requestFriendshipPq(const ToxId& friendId, const QString& message)
+{
+    const QMutexLocker<QRecursiveMutex> ml{&coreLoopLock};
+
+    const ToxPk friendPk = friendId.getPublicKey();
+    const QString errorMessage = getFriendRequestErrorMessage(friendId, message);
+    if (!errorMessage.isNull()) {
+        emit failedToAddFriend(friendPk, errorMessage);
+        emit saveRequest();
+        return;
+    }
+
+    if (!friendId.isPqAddress()) {
+        qWarning() << "requestFriendshipPq called with non-PQ address, falling back to classical";
+        requestFriendship(friendId, message);
+        return;
+    }
+
+    const ToxString cMessage(message);
+    Tox_Err_Friend_Add error;
+    const uint32_t friendNumber =
+        tox_friend_add_pq(tox.get(), friendId.getBytes(), cMessage.data(), cMessage.size(), &error);
+    if (PARSE_ERR(error)) {
+        qDebug() << "Requested PQ friendship from" << friendNumber;
+        emit saveRequest();
+        emit friendAdded(friendNumber, friendPk);
+        emit requestSent(friendPk, message);
+    } else {
+        qDebug() << "Failed to send PQ friend request";
+        emit failedToAddFriend(friendPk);
+    }
+}
+
+/**
+ * @brief Gets our post-quantum Tox ID (46 bytes).
+ * @return The PQ ToxId including ML-KEM commitment, or classical if PQ unavailable.
+ */
+ToxId Core::getSelfIdPq() const
+{
+    const QMutexLocker<QRecursiveMutex> ml{&coreLoopLock};
+
+    std::vector<uint8_t> friendId(ToxId::sizePq);
+    if (tox_self_get_address_pq(tox.get(), friendId.data())) {
+        return ToxId(friendId.data(), friendId.size());
+    }
+    // Fall back to classical if PQ not available
+    return getSelfId();
+}
+
+/**
+ * @brief Checks if post-quantum cryptography is available.
+ * @return True if PQ toxcore is being used.
+ */
+bool Core::isPqAvailable() const
+{
+    // If compiled with PQ support, check if the address size is 46 bytes (PQ)
+    return tox_address_size() == ToxId::sizePq;
+}
+
+/**
+ * @brief Gets the identity verification status for a friend.
+ * @param friendId The friend number to query.
+ * @return The identity status (Unknown, Classical, PqUnverified, PqVerified).
+ */
+Status::IdentityStatus Core::getFriendIdentityStatus(uint32_t friendId) const
+{
+    const QMutexLocker<QRecursiveMutex> ml{&coreLoopLock};
+
+    Tox_Err_Friend_Query error;
+    const int status = tox_friend_get_identity_status(tox.get(), friendId, &error);
+    if (!PARSE_ERR(error)) {
+        return Status::IdentityStatus::Unknown;
+    }
+    return static_cast<Status::IdentityStatus>(status);
+}
+
+/**
+ * @brief Callback for friend identity status changes.
+ * @param tox Tox instance.
+ * @param friendId The friend whose status changed.
+ * @param identityStatus The new identity status.
+ * @param vCore Pointer to the Core instance.
+ */
+void Core::onFriendIdentityStatusChanged(Tox* tox, uint32_t friendId,
+                                         Tox_Connection_Identity identityStatus, void* vCore)
+{
+    std::ignore = tox;
+    Core* core = static_cast<Core*>(vCore);
+    const auto status = static_cast<Status::IdentityStatus>(identityStatus);
+    qDebug() << "Friend" << friendId << "identity status changed to"
+             << static_cast<int>(identityStatus);
+    emit core->friendIdentityStatusChanged(friendId, status);
+}
+#endif
 
 bool Core::sendMessageWithType(uint32_t friendId, const QString& message, Tox_Message_Type type,
                                ReceiptNum& receipt)

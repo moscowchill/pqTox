@@ -92,6 +92,12 @@ public:
     ToxId getSelfId() const override;
     ToxPk getSelfPublicKey() const override;
 
+#ifdef PQTOX_PQ_SUPPORT
+    ToxId getSelfIdPq() const;
+    bool isPqAvailable() const;
+    Status::IdentityStatus getFriendIdentityStatus(uint32_t friendId) const;
+#endif
+
     QByteArray getSelfDhtId() const;
     int getSelfUdpPort() const;
 
@@ -102,6 +108,9 @@ public slots:
 
     void acceptFriendRequest(const ToxPk& friendPk);
     void requestFriendship(const ToxId& friendId, const QString& message);
+#ifdef PQTOX_PQ_SUPPORT
+    void requestFriendshipPq(const ToxId& friendId, const QString& message);
+#endif
     void conferenceInviteFriend(uint32_t friendId, int conferenceId);
     int createConference(uint8_t type = TOX_CONFERENCE_TYPE_AV);
 
@@ -181,6 +190,10 @@ signals:
 
     void failedToRemoveFriend(uint32_t friendId);
 
+#ifdef PQTOX_PQ_SUPPORT
+    void friendIdentityStatusChanged(uint32_t friendId, Status::IdentityStatus identityStatus);
+#endif
+
 private:
     Core(QThread* coreThread_, IBootstrapListGenerator& bootstrapListGenerator_,
          const ICoreSettings& settings_);
@@ -210,6 +223,11 @@ private:
                                         const uint8_t* cTitle, size_t length, void* vCore);
 
     static void onReadReceiptCallback(Tox* tox, uint32_t friendId, uint32_t receipt, void* core);
+
+#ifdef PQTOX_PQ_SUPPORT
+    static void onFriendIdentityStatusChanged(Tox* tox, uint32_t friendId,
+                                              Tox_Connection_Identity identityStatus, void* vCore);
+#endif
 
     void sendConferenceMessageWithType(int conferenceId, const QString& message, Tox_Message_Type type);
     bool sendMessageWithType(uint32_t friendId, const QString& message, Tox_Message_Type type,
