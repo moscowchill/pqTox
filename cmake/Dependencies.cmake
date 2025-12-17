@@ -168,6 +168,28 @@ if (NOT TOXCORE_FOUND)
   search_dependency(TOXAV           PACKAGE libtoxav)
 endif()
 
+# Check for post-quantum toxcore support
+# PQ toxcore adds ML-KEM-768 + X25519 hybrid key exchange
+include(CheckSymbolExists)
+set(CMAKE_REQUIRED_LIBRARIES ${TOXCORE_LIBRARIES})
+set(CMAKE_REQUIRED_INCLUDES ${TOXCORE_INCLUDE_DIRS})
+
+check_symbol_exists(tox_friend_get_identity_status "tox/tox.h" HAVE_TOX_PQ_IDENTITY)
+check_symbol_exists(tox_friend_add_pq "tox/tox.h" HAVE_TOX_PQ_ADDRESS)
+check_symbol_exists(tox_self_get_address_pq "tox/tox.h" HAVE_TOX_PQ_SELF_ADDRESS)
+
+if(HAVE_TOX_PQ_IDENTITY AND HAVE_TOX_PQ_ADDRESS)
+  message(STATUS "Post-quantum toxcore detected - enabling PQ support")
+  add_definitions(-DPQTOX_PQ_SUPPORT)
+  set(PQTOX_PQ_SUPPORT TRUE)
+else()
+  message(STATUS "Classical toxcore detected - PQ features disabled")
+  set(PQTOX_PQ_SUPPORT FALSE)
+endif()
+
+unset(CMAKE_REQUIRED_LIBRARIES)
+unset(CMAKE_REQUIRED_INCLUDES)
+
 search_dependency(LIBSODIUM         PACKAGE libsodium)
 search_dependency(OPUS              PACKAGE opus)
 search_dependency(VPX               PACKAGE vpx)
