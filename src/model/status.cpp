@@ -64,4 +64,61 @@ bool isOnline(Status status)
 {
     return status != Status::Offline && status != Status::Blocked;
 }
+
+QString getIdentityStatusTitle(IdentityStatus status)
+{
+    switch (status) {
+    case IdentityStatus::Unknown:
+        return QObject::tr("Unknown", "identity status");
+    case IdentityStatus::Classical:
+        return QObject::tr("Classical", "identity status");
+    case IdentityStatus::PqUnverified:
+        return QObject::tr("PQ Unverified", "identity status");
+    case IdentityStatus::PqVerified:
+        return QObject::tr("PQ Verified", "identity status");
+    }
+    assert(false);
+    return QStringLiteral("");
+}
+
+QString getIdentityStatusIconPath(IdentityStatus status)
+{
+    switch (status) {
+    case IdentityStatus::Unknown:
+        return ":/img/security/shield_gray.svg";
+    case IdentityStatus::Classical:
+        return ":/img/security/shield_yellow.svg";
+    case IdentityStatus::PqUnverified:
+        return ":/img/security/shield_blue.svg";
+    case IdentityStatus::PqVerified:
+        return ":/img/security/shield_green.svg";
+    }
+    assert(false);
+    return QStringLiteral("");
+}
+
+QString getIdentityStatusDescription(IdentityStatus status)
+{
+    switch (status) {
+    case IdentityStatus::Unknown:
+        return QObject::tr("Not connected", "identity status description");
+    case IdentityStatus::Classical:
+        return QObject::tr("Classical encryption (X25519) - not quantum-resistant",
+                           "identity status description");
+    case IdentityStatus::PqUnverified:
+        return QObject::tr("Post-quantum encryption active, but identity not verified",
+                           "identity status description");
+    case IdentityStatus::PqVerified:
+        return QObject::tr(
+            "Post-quantum encryption with verified identity - fully quantum-resistant",
+            "identity status description");
+    }
+    assert(false);
+    return QStringLiteral("");
+}
+
+bool isPqProtected(IdentityStatus status)
+{
+    return status == IdentityStatus::PqUnverified || status == IdentityStatus::PqVerified;
+}
 } // namespace Status
