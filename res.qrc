@@ -30,6 +30,10 @@
         <file>img/status/offline.svg</file>
         <file>img/status/online_notification.svg</file>
         <file>img/status/online.svg</file>
+        <file>img/security/shield_gray.svg</file>
+        <file>img/security/shield_yellow.svg</file>
+        <file>img/security/shield_blue.svg</file>
+        <file>img/security/shield_green.svg</file>
         <file>img/taskbar/dark/taskbar_away_event.svg</file>
         <file>img/taskbar/dark/taskbar_away.svg</file>
         <file>img/taskbar/dark/taskbar_busy_event.svg</file>

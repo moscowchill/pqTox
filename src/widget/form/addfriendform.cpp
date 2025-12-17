@@ -103,8 +103,8 @@ AddFriendForm::AddFriendForm(ToxId ownId_, Settings& settings_, Style& style_,
     connect(&core, &Core::usernameSet, this, &AddFriendForm::onUsernameSet);
 
     // accessibility stuff
-    toxIdLabel.setAccessibleDescription(tr("Tox ID, 76 hexadecimal characters"));
-    toxId.setAccessibleDescription(tr("Type in Tox ID of your friend"));
+    toxIdLabel.setAccessibleDescription(tr("Tox ID, 76 or 92 hexadecimal characters"));
+    toxId.setAccessibleDescription(tr("Type in Tox ID of your friend (classical or post-quantum)"));
     messageLabel.setAccessibleDescription(tr("Friend request message"));
     message.setAccessibleDescription(tr(
         "Type message to send with the friend request or leave empty to send a default message"));
@@ -273,11 +273,19 @@ void AddFriendForm::onIdChanged(const QString& id)
 
     const bool isValidId = checkIsValidId(strippedId);
     const bool isValidOrEmpty = strippedId.isEmpty() || isValidId;
+    const bool isPqId = ToxId::isPqToxId(strippedId);
 
     //: Tox ID of the person you're sending a friend request to
     const QString toxIdText(tr("Tox ID"));
-    //: Tox ID format description
-    const QString toxIdComment(tr("76 hexadecimal characters"));
+    //: Tox ID format description - supports both classical and PQ addresses
+    QString toxIdComment;
+    if (isPqId) {
+        toxIdComment = tr("92 hex characters (PQ)");
+    } else if (ToxId::isClassicalToxId(strippedId)) {
+        toxIdComment = tr("76 hex characters (classical)");
+    } else {
+        toxIdComment = tr("76 or 92 hexadecimal characters");
+    }
 
     const QString labelText =
         isValidId ? QStringLiteral("%1 (%2)") : QStringLiteral("%1 <font color='red'>(%2)</font>");
