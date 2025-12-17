@@ -41,6 +41,11 @@ public:
     void setStatus(Status::Status s);
     Status::Status getStatus() const;
 
+#ifdef PQTOX_PQ_SUPPORT
+    void setIdentityStatus(Status::IdentityStatus s);
+    Status::IdentityStatus getIdentityStatus() const;
+#endif
+
 signals:
     void nameChanged(const ToxPk& friendId, const QString& name);
     void aliasChanged(const ToxPk& friendId, QString alias);
@@ -48,6 +53,9 @@ signals:
     void onlineOfflineChanged(const ToxPk& friendId, bool isOnline);
     void statusMessageChanged(const ToxPk& friendId, const QString& message);
     void loadChatHistory();
+#ifdef PQTOX_PQ_SUPPORT
+    void identityStatusChanged(const ToxPk& friendId, Status::IdentityStatus identityStatus);
+#endif
 
 private:
     QString userName;
@@ -57,4 +65,7 @@ private:
     uint32_t friendId;
     bool hasNewEvents;
     Status::Status friendStatus;
+#ifdef PQTOX_PQ_SUPPORT
+    Status::IdentityStatus identityStatus_ = Status::IdentityStatus::Unknown;
+#endif
 };

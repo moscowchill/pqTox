@@ -170,3 +170,27 @@ Status::Status Friend::getStatus() const
 {
     return friendStatus;
 }
+
+#ifdef PQTOX_PQ_SUPPORT
+/**
+ * @brief Sets the post-quantum identity verification status for this friend.
+ * @param s The new identity status.
+ */
+void Friend::setIdentityStatus(Status::IdentityStatus s)
+{
+    if (identityStatus_ == s) {
+        return;
+    }
+    identityStatus_ = s;
+    emit identityStatusChanged(friendPk, identityStatus_);
+}
+
+/**
+ * @brief Gets the post-quantum identity verification status.
+ * @return The current identity status.
+ */
+Status::IdentityStatus Friend::getIdentityStatus() const
+{
+    return identityStatus_;
+}
+#endif
