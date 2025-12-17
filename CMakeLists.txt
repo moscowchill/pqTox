@@ -63,10 +63,10 @@ execute_process(
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 project(
-  qTox
+  pqTox
   VERSION 1.18.3
   LANGUAGES CXX)
-set(PROJECT_ORG "io.github.qtox")
+set(PROJECT_ORG "io.github.pqtox")
 
 string(TOLOWER ${PROJECT_NAME} BINARY_NAME)
 
