@@ -61,8 +61,7 @@ Core::Core(QThread* coreThread_, IBootstrapListGenerator& bootstrapListGenerator
     assert(ToxPk::size == tox_public_key_size());
     assert(ConferenceId::size == tox_conference_id_size());
     // Support both classical (38-byte) and PQ (46-byte) addresses
-    const size_t toxAddrSize = tox_address_size();
-    assert(toxAddrSize == ToxId::size || toxAddrSize == ToxId::sizePq);
+    assert(tox_address_size() == ToxId::size || tox_address_size() == ToxId::sizePq);
     toxTimer->setSingleShot(true);
     connect(toxTimer, &QTimer::timeout, this, &Core::process);
     connect(coreThread_, &QThread::finished, toxTimer, &QTimer::stop);

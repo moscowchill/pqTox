@@ -2,16 +2,16 @@ Unicode True
 ###################
 #META
 ###################
-!define APP_NAME "qTox"
-!define COMP_NAME "Tox"
-!define WEB_SITE "https://github.com/qTox/qTox"
+!define APP_NAME "pqTox"
+!define COMP_NAME "pqTox"
+!define WEB_SITE "https://github.com/moscowchill/pqTox"
 !define VERSION "1.0.0.0"
-!define DESCRIPTION "qTox Installer"
-!define COPYRIGHT "The Tox Project"
-!define INSTALLER_NAME "setup-qtox.exe"
-!define MAIN_APP_EXE "bin\qtox.exe"
+!define DESCRIPTION "pqTox Installer"
+!define COPYRIGHT "The pqTox Project"
+!define INSTALLER_NAME "setup-pqtox.exe"
+!define MAIN_APP_EXE "bin\pqtox.exe"
 !define REG_ROOT "HKLM"
-!define REG_APP_PATH "Software\Microsoft\Windows\CurrentVersion\App Paths\qtox.exe"
+!define REG_APP_PATH "Software\Microsoft\Windows\CurrentVersion\App Paths\pqtox.exe"
 !define UNINSTALL_PATH "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
 !define REG_START_MENU "Start Menu Folder"
 var SM_Folder
@@ -164,7 +164,7 @@ VIAddVersionKey "FileVersion" "${VERSION}"
 !insertmacro MUI_PAGE_DIRECTORY
 !ifdef REG_START_MENU
   !define MUI_STARTMENUPAGE_NODISABLE
-  !define MUI_STARTMENUPAGE_DEFAULTFOLDER "qTox"
+  !define MUI_STARTMENUPAGE_DEFAULTFOLDER "pqTox"
   !define MUI_STARTMENUPAGE_REGISTRY_ROOT "${REG_ROOT}"
   !define MUI_STARTMENUPAGE_REGISTRY_KEY "${UNINSTALL_PATH}"
   !define MUI_STARTMENUPAGE_REGISTRY_VALUENAME "${REG_START_MENU}"
@@ -173,20 +173,20 @@ VIAddVersionKey "FileVersion" "${VERSION}"
 !insertmacro MUI_PAGE_INSTFILES
 
 Function finishpageaction
-${CreateShortcut} "$DESKTOP\qTox.lnk" "$INSTDIR\${MAIN_APP_EXE}" "" "" ""
+${CreateShortcut} "$DESKTOP\pqTox.lnk" "$INSTDIR\${MAIN_APP_EXE}" "" "" ""
 FunctionEnd
 
 !define MUI_FINISHPAGE_SHOWREADME ""
 !define MUI_FINISHPAGE_SHOWREADME_TEXT "Create Desktop Shortcut"
 !define MUI_FINISHPAGE_SHOWREADME_FUNCTION finishpageaction
 
-!define MUI_FINISHPAGE_RUN_FUNCTION Launch_qTox_without_Admin
+!define MUI_FINISHPAGE_RUN_FUNCTION Launch_pqTox_without_Admin
 !define MUI_FINISHPAGE_RUN
-!define MUI_FINISHPAGE_LINK "Find qTox on GitHub"
-!define MUI_FINISHPAGE_LINK_LOCATION "https://github.com/qTox/qTox"
+!define MUI_FINISHPAGE_LINK "Find pqTox on GitHub"
+!define MUI_FINISHPAGE_LINK_LOCATION "https://github.com/moscowchill/pqTox"
 !insertmacro MUI_PAGE_FINISH
 
-Function Launch_qTox_without_Admin
+Function Launch_pqTox_without_Admin
    SetOutPath $INSTDIR
    ShellExecAsUser::ShellExecAsUser "" "$INSTDIR\${MAIN_APP_EXE}" ""
 FunctionEnd
@@ -215,13 +215,13 @@ FunctionEnd
       FileReadUTF16LE $0 $1 1024
       FileReadUTF16LE $0 $2 1024
     FileClose $0
-    FileOpen $0 "$TEMP\qTox-install-file-permissions.txt" w
+    FileOpen $0 "$TEMP\pqTox-install-file-permissions.txt" w
       FileWriteUTF16LE  $0 "$INSTDIR"
       FileWriteUTF16LE  $0 "$\r$\n"
       DetailPrint "Writing to file: $2"
       FileWriteUTF16LE  $0 "$2"
     FileClose $0
-    nsExec::Exec 'icacls "" /restore "$TEMP\qTox-install-file-permissions.txt"'
+    nsExec::Exec 'icacls "" /restore "$TEMP\pqTox-install-file-permissions.txt"'
   SectionEnd
 
   Section -openlogfile
@@ -245,42 +245,47 @@ Section "Install"
 
   ${CreateDirectory} "$INSTDIR\bin"
   ${SetOutPath} "$INSTDIR\bin"
-  ${File} "qtox\*.*"
+  ${File} "pqtox\*.*"
 
   ${CreateDirectory} "$INSTDIR\bin\imageformats"
   ${SetOutPath} "$INSTDIR\bin\imageformats"
-  File /nonfatal "qtox\imageformats\*.*"
+  File /nonfatal "pqtox\imageformats\*.*"
   ${SetOutPath} "$INSTDIR\bin"
 
   ${CreateDirectory} "$INSTDIR\bin\iconengines"
   ${SetOutPath} "$INSTDIR\bin\iconengines"
-  File /nonfatal "qtox\iconengines\*.*"
+  File /nonfatal "pqtox\iconengines\*.*"
   ${SetOutPath} "$INSTDIR\bin"
 
   ${CreateDirectory} "$INSTDIR\bin\platforms"
   ${SetOutPath} "$INSTDIR\bin\platforms"
-  File /nonfatal "qtox\platforms\*.*"
+  File /nonfatal "pqtox\platforms\*.*"
   ${SetOutPath} "$INSTDIR\bin"
 
   ${CreateDirectory} "$INSTDIR\bin\tls"
   ${SetOutPath} "$INSTDIR\bin\tls"
-  File /nonfatal "qtox\tls\*.*"
+  File /nonfatal "pqtox\tls\*.*"
+  ${SetOutPath} "$INSTDIR\bin"
+
+  ${CreateDirectory} "$INSTDIR\bin\kf6"
+  ${SetOutPath} "$INSTDIR\bin\kf6"
+  File /nonfatal /r "pqtox\kf6\*.*"
   ${SetOutPath} "$INSTDIR\bin"
 
   # Create shortcuts
-  ${CreateDirectory} "$SMPROGRAMS\qTox"
-  ${CreateShortCut} "$SMPROGRAMS\qTox\qTox.lnk" "$INSTDIR\${MAIN_APP_EXE}" "" "" ""
-  ${CreateShortCut} "$SMPROGRAMS\qTox\Uninstall qTox.lnk" "$INSTDIR\uninstall.exe" "" "" ""
+  ${CreateDirectory} "$SMPROGRAMS\pqTox"
+  ${CreateShortCut} "$SMPROGRAMS\pqTox\pqTox.lnk" "$INSTDIR\${MAIN_APP_EXE}" "" "" ""
+  ${CreateShortCut} "$SMPROGRAMS\pqTox\Uninstall pqTox.lnk" "$INSTDIR\uninstall.exe" "" "" ""
 
   # Write setup/app info into the registry
   SetRegView 64
   ${WriteRegStr} "${REG_ROOT}" "${REG_APP_PATH}" "" "$INSTDIR\${MAIN_APP_EXE}"
   ${WriteRegStr} "${REG_ROOT}" "${REG_APP_PATH}" "Path" "$INSTDIR\bin\"
-  ${WriteRegStr} ${REG_ROOT} "${UNINSTALL_PATH}" "DisplayName" "qTox"
+  ${WriteRegStr} ${REG_ROOT} "${UNINSTALL_PATH}" "DisplayName" "pqTox"
   ${WriteRegStr} ${REG_ROOT} "${UNINSTALL_PATH}" "DisplayVersion" "1.18.3"
-  ${WriteRegStr} ${REG_ROOT} "${UNINSTALL_PATH}" "Publisher" "The qTox Project"
+  ${WriteRegStr} ${REG_ROOT} "${UNINSTALL_PATH}" "Publisher" "The pqTox Project"
   ${WriteRegStr} ${REG_ROOT} "${UNINSTALL_PATH}" "UninstallString" "$INSTDIR\uninstall.exe"
-  ${WriteRegStr} ${REG_ROOT} "${UNINSTALL_PATH}" "URLInfoAbout" "https://qtox.github.io"
+  ${WriteRegStr} ${REG_ROOT} "${UNINSTALL_PATH}" "URLInfoAbout" "https://github.com/moscowchill/pqTox"
 
   # Register the tox: protocol
   ${WriteRegStr} HKCR "tox" "" "URL:tox Protocol"
@@ -288,7 +293,7 @@ Section "Install"
   ${WriteRegStr} HKCR "tox\shell\open\command" "" "$INSTDIR\${MAIN_APP_EXE} %1"
 
   # Register the .tox file associations
-  ${WriteRegStr} "HKCR" "Applications\qtox.exe\SupportedTypes" ".tox" ""
+  ${WriteRegStr} "HKCR" "Applications\pqtox.exe\SupportedTypes" ".tox" ""
   ${WriteRegStr} HKCR ".tox" "" "toxsave"
   ${WriteRegStr} HKCR "toxsave" "" "Tox save file"
   ${WriteRegStr} HKCR "toxsave\DefaultIcon" "" "$INSTDIR\${MAIN_APP_EXE}"
@@ -352,13 +357,13 @@ Section Uninstall
   Pop $R0
 
   ;Remove start menu entries
-  RMDir /r /REBOOTOK "$SMPROGRAMS\qTox"
+  RMDir /r /REBOOTOK "$SMPROGRAMS\pqTox"
 
   ;Remove registry keys
   SetRegView 64
   DeleteRegKey ${REG_ROOT} "${REG_APP_PATH}"
   DeleteRegKey ${REG_ROOT} "${UNINSTALL_PATH}"
-  DeleteRegKey HKCR "Applications\qtox.exe"
+  DeleteRegKey HKCR "Applications\pqtox.exe"
   DeleteRegKey HKCR ".tox"
   DeleteRegKey HKCR "tox"
   DeleteRegKey HKCR "toxsave"

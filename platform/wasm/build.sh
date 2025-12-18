@@ -26,11 +26,11 @@ cp \
   platform/wasm/_headers \
   _build-wasm/qtloader.js \
   _build-wasm/qtlogo.svg \
-  _build-wasm/qtox.js \
-  _build-wasm/qtox.wasm \
+  _build-wasm/pqtox.js \
+  _build-wasm/pqtox.wasm \
   _site/
 cp \
-  _build-wasm/qtox.html \
+  _build-wasm/pqtox.html \
   _site/index.html
 
 ccache --show-stats

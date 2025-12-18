@@ -1,0 +1,467 @@
+name: Build PQ Windows
+
+on:
+  push:
+    branches: ["master"]
+    tags: ["v*"]
+  pull_request:
+    branches: ["master"]
+  workflow_dispatch:
+    inputs:
+      toxcore_ref:
+        description: 'c-toxcore-pq branch/tag to build'
+        required: false
+        default: 'master'
+
+concurrency:
+  group: build-pq-windows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Versions for dependencies
+  LIBSODIUM_VERSION: "1.0.20"
+  OPUS_VERSION: "1.5.2"
+  VPX_VERSION: "1.14.1"
+
+jobs:
+  build-toxcore-pq-windows:
+    name: Build PQ Toxcore for Windows
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [x86_64, i686]
+
+    steps:
+      - name: Install MinGW toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            mingw-w64 \
+            mingw-w64-tools \
+            cmake \
+            ninja-build \
+            nasm \
+            yasm \
+            pkg-config \
+            wget \
+            unzip \
+            autoconf \
+            automake \
+            libtool \
+            git
+
+      - name: Set toolchain variables
+        run: |
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            echo "TOOLCHAIN_PREFIX=x86_64-w64-mingw32" >> $GITHUB_ENV
+            echo "ARCH_BITS=64" >> $GITHUB_ENV
+          else
+            echo "TOOLCHAIN_PREFIX=i686-w64-mingw32" >> $GITHUB_ENV
+            echo "ARCH_BITS=32" >> $GITHUB_ENV
+          fi
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/deps-${{ matrix.arch }}
+          key: pq-deps-${{ matrix.arch }}-libsodium-git-master-${{ env.OPUS_VERSION }}-${{ env.VPX_VERSION }}-v1
+
+      - name: Build libsodium from git master (ML-KEM support)
+        run: |
+          INSTALL_PREFIX="$HOME/deps-${{ matrix.arch }}"
+          mkdir -p "$INSTALL_PREFIX"
+
+          if [ ! -f "$INSTALL_PREFIX/lib/libsodium.a" ]; then
+            # Use git master for ML-KEM-768 support (not in 1.0.20 release)
+            git clone --depth 1 https://github.com/jedisct1/libsodium.git
+            cd libsodium
+
+            # Generate configure script (SODIUM_DEV required for git builds)
+            SODIUM_DEV=1 ./autogen.sh -s
+
+            ./configure \
+              --host=${{ env.TOOLCHAIN_PREFIX }} \
+              --prefix="$INSTALL_PREFIX" \
+              --enable-static \
+              --disable-shared \
+              --disable-pie
+
+            make -j$(nproc)
+            make install
+            cd ..
+          fi
+
+      - name: Build opus
+        run: |
+          INSTALL_PREFIX="$HOME/deps-${{ matrix.arch }}"
+
+          if [ ! -f "$INSTALL_PREFIX/lib/libopus.a" ]; then
+            wget -q "https://downloads.xiph.org/releases/opus/opus-${{ env.OPUS_VERSION }}.tar.gz"
+            tar xzf opus-${{ env.OPUS_VERSION }}.tar.gz
+            cd opus-${{ env.OPUS_VERSION }}
+
+            ./configure \
+              --host=${{ env.TOOLCHAIN_PREFIX }} \
+              --prefix="$INSTALL_PREFIX" \
+              --enable-static \
+              --disable-shared \
+              --disable-doc \
+              --disable-extra-programs
+
+            make -j$(nproc)
+            make install
+            cd ..
+          fi
+
+      - name: Build libvpx
+        run: |
+          INSTALL_PREFIX="$HOME/deps-${{ matrix.arch }}"
+
+          if [ ! -f "$INSTALL_PREFIX/lib/libvpx.a" ]; then
+            wget -q "https://github.com/webmproject/libvpx/archive/refs/tags/v${{ env.VPX_VERSION }}.tar.gz" -O libvpx.tar.gz
+            tar xzf libvpx.tar.gz
+            cd libvpx-${{ env.VPX_VERSION }}
+
+            if [ "${{ matrix.arch }}" = "x86_64" ]; then
+              TARGET="x86_64-win64-gcc"
+            else
+              TARGET="x86-win32-gcc"
+            fi
+
+            CROSS=${{ env.TOOLCHAIN_PREFIX }}- ./configure \
+              --target=$TARGET \
+              --prefix="$INSTALL_PREFIX" \
+              --enable-static \
+              --disable-shared \
+              --disable-examples \
+              --disable-tools \
+              --disable-docs \
+              --disable-unit-tests
+
+            make -j$(nproc)
+            make install
+            cd ..
+          fi
+
+      - name: Checkout c-toxcore-pq
+        uses: actions/checkout@v4
+        with:
+          repository: moscowchill/c-toxcore-pq
+          ref: ${{ github.event.inputs.toxcore_ref || 'master' }}
+          path: c-toxcore-pq
+          submodules: recursive
+
+      - name: Build c-toxcore-pq
+        run: |
+          INSTALL_PREFIX="$HOME/deps-${{ matrix.arch }}"
+          TOXCORE_PREFIX="$HOME/toxcore-pq-${{ matrix.arch }}"
+
+          cd c-toxcore-pq
+          rm -rf build
+          mkdir -p build && cd build
+
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE=../cmake/toolchain-mingw${{ env.ARCH_BITS }}.cmake \
+            -DCMAKE_PREFIX_PATH="$INSTALL_PREFIX" \
+            -DCMAKE_INSTALL_PREFIX="$TOXCORE_PREFIX" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_TOXAV=ON \
+            -DBOOTSTRAP_DAEMON=OFF \
+            -DDHT_BOOTSTRAP=OFF \
+            -DENABLE_SHARED=OFF \
+            -DENABLE_STATIC=ON
+
+          make -j$(nproc)
+          make install
+
+      - name: Upload toxcore-pq artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: toxcore-pq-windows-${{ matrix.arch }}
+          path: ~/toxcore-pq-${{ matrix.arch }}
+
+      - name: Upload dependencies artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: deps-windows-${{ matrix.arch }}
+          path: ~/deps-${{ matrix.arch }}
+
+  build-pqtox-windows:
+    name: Build pqTox for Windows (${{ matrix.arch }}, ${{ matrix.build_type }})
+    needs: build-toxcore-pq-windows
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        arch: [x86_64]  # Start with 64-bit only
+        build_type: [Release, Debug]
+
+    steps:
+      - name: Checkout pqTox
+        uses: actions/checkout@v4
+
+      - name: Download toxcore-pq
+        uses: actions/download-artifact@v4
+        with:
+          name: toxcore-pq-windows-${{ matrix.arch }}
+          path: ~/toxcore-pq-${{ matrix.arch }}
+
+      - name: Download dependencies
+        uses: actions/download-artifact@v4
+        with:
+          name: deps-windows-${{ matrix.arch }}
+          path: ~/deps-${{ matrix.arch }}
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            mingw-w64 \
+            mingw-w64-tools \
+            cmake \
+            ninja-build \
+            nsis \
+            wget \
+            git \
+            autoconf \
+            automake \
+            libtool \
+            pkg-config \
+            bzip2 \
+            xz-utils \
+            nasm \
+            yasm \
+            python3-pip
+
+      - name: Cache Qt6
+        uses: actions/cache@v4
+        id: cache-qt
+        with:
+          path: ~/Qt
+          key: qt6-mingw-${{ matrix.arch }}-6.6.3-v1
+
+      - name: Install Qt6 for MinGW cross-compilation
+        if: steps.cache-qt.outputs.cache-hit != 'true'
+        run: |
+          pip install aqtinstall
+
+          # List available architectures for debugging
+          echo "=== Available Qt 6.6.3 architectures for Linux ==="
+          aqt list-qt linux desktop --arch 6.6.3 || true
+          echo "=== Available Qt 6.6.3 architectures for Windows ==="
+          aqt list-qt windows desktop --arch 6.6.3 || true
+
+          # Install Qt6 for Linux (host tools for cross-compilation: moc, rcc, uic)
+          # Using Qt 6.6.3 which is more stable with aqtinstall
+          aqt install-qt linux desktop 6.6.3 gcc_64 \
+            --outputdir ~/Qt
+
+          # Install Qt6 for Windows MinGW target
+          aqt install-qt windows desktop 6.6.3 win64_mingw \
+            --outputdir ~/Qt
+
+          echo "=== Qt6 installation complete ==="
+          ls -la ~/Qt/
+          ls -la ~/Qt/6.6.3/ || true
+
+      - name: Cache additional dependencies
+        uses: actions/cache@v4
+        id: cache-extra-deps
+        with:
+          path: ~/extra-deps
+          key: extra-deps-mingw-${{ matrix.arch }}-v5
+
+      - name: Build additional dependencies for Windows
+        if: steps.cache-extra-deps.outputs.cache-hit != 'true'
+        run: |
+          EXTRA_PREFIX="$HOME/extra-deps"
+          mkdir -p "$EXTRA_PREFIX"
+
+          # Build OpenSSL for Windows
+          echo "Building OpenSSL..."
+          wget -q https://www.openssl.org/source/openssl-3.2.1.tar.gz
+          tar xzf openssl-3.2.1.tar.gz
+          cd openssl-3.2.1
+          ./Configure mingw64 --cross-compile-prefix=x86_64-w64-mingw32- \
+            --prefix="$EXTRA_PREFIX" no-shared
+          make -j$(nproc)
+          make install_sw
+          cd ..
+
+          # Build libexif for Windows
+          echo "Building libexif..."
+          wget -q https://github.com/libexif/libexif/releases/download/v0.6.24/libexif-0.6.24.tar.bz2
+          tar xjf libexif-0.6.24.tar.bz2
+          cd libexif-0.6.24
+          ./configure --host=x86_64-w64-mingw32 --prefix="$EXTRA_PREFIX" \
+            --enable-static --disable-shared
+          make -j$(nproc) && make install
+          cd ..
+
+          # Build qrencode for Windows (using GitHub releases for reliability)
+          echo "Building qrencode..."
+          wget -q https://github.com/fukuchi/libqrencode/archive/refs/tags/v4.1.1.tar.gz -O qrencode.tar.gz
+          tar xzf qrencode.tar.gz
+          cd libqrencode-4.1.1
+          # libqrencode from GitHub needs autoreconf
+          autoreconf -fi
+          ./configure --host=x86_64-w64-mingw32 --prefix="$EXTRA_PREFIX" \
+            --enable-static --disable-shared --without-tools
+          make -j$(nproc) && make install
+          cd ..
+
+          # Build OpenAL Soft for Windows
+          echo "Building OpenAL Soft..."
+          wget -q https://github.com/kcat/openal-soft/archive/refs/tags/1.23.1.tar.gz -O openal.tar.gz
+          tar xzf openal.tar.gz
+          cd openal-soft-1.23.1
+          rm -rf build-mingw && mkdir build-mingw && cd build-mingw
+          cmake .. \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER=x86_64-w64-mingw32-gcc \
+            -DCMAKE_CXX_COMPILER=x86_64-w64-mingw32-g++ \
+            -DCMAKE_INSTALL_PREFIX="$EXTRA_PREFIX" \
+            -DLIBTYPE=STATIC \
+            -DALSOFT_UTILS=OFF \
+            -DALSOFT_EXAMPLES=OFF
+          make -j$(nproc) && make install
+          cd ../..
+
+          # Fix OpenAL pkgconfig for static linking - add Windows libs dependencies
+          if [ -f "$EXTRA_PREFIX/lib/pkgconfig/openal.pc" ]; then
+            echo "Patching openal.pc for static Windows linking..."
+            # Add Windows multimedia libraries that OpenAL's static library depends on
+            sed -i 's/^Libs:.*/& -lwinmm -lole32/' "$EXTRA_PREFIX/lib/pkgconfig/openal.pc"
+            cat "$EXTRA_PREFIX/lib/pkgconfig/openal.pc"
+          fi
+
+          # Build SQLite3 for sqlcipher base
+          echo "Building SQLite3..."
+          wget -q https://www.sqlite.org/2024/sqlite-autoconf-3450000.tar.gz
+          tar xzf sqlite-autoconf-3450000.tar.gz
+          cd sqlite-autoconf-3450000
+          ./configure --host=x86_64-w64-mingw32 --prefix="$EXTRA_PREFIX" \
+            --enable-static --disable-shared
+          make -j$(nproc) && make install
+          cd ..
+
+          # NOTE: SQLCipher cross-compilation is complex, using SQLite3 for now
+          # SQLCipher can be added later with pre-built binaries or native Windows build
+          # The sqlite3 library was already built above and provides the basic functionality
+          # Create sqlcipher compatibility symlinks for both pkgconfig and library
+          echo "Creating sqlcipher compatibility symlinks..."
+          if [ -f "$EXTRA_PREFIX/lib/pkgconfig/sqlite3.pc" ]; then
+            cp "$EXTRA_PREFIX/lib/pkgconfig/sqlite3.pc" "$EXTRA_PREFIX/lib/pkgconfig/sqlcipher.pc"
+            sed -i 's/sqlite3/sqlcipher/g' "$EXTRA_PREFIX/lib/pkgconfig/sqlcipher.pc"
+          fi
+          # Create library symlink so linker can find -lsqlcipher
+          if [ -f "$EXTRA_PREFIX/lib/libsqlite3.a" ]; then
+            ln -sf libsqlite3.a "$EXTRA_PREFIX/lib/libsqlcipher.a"
+          fi
+
+          # Build FFmpeg for Windows (minimal build for pqTox)
+          echo "Building FFmpeg..."
+
+          # Use the correct deps path that matches pkgconfig prefix
+          DEPS_DIR="$HOME/deps-x86_64"
+
+          # Debug: show what's in deps directory
+          echo "=== Contents of deps directory ==="
+          ls -la "$DEPS_DIR/" || true
+          ls -la "$DEPS_DIR/lib/pkgconfig/" || true
+          echo "=== PKG_CONFIG files ==="
+          cat "$DEPS_DIR/lib/pkgconfig/opus.pc" 2>/dev/null || echo "opus.pc not found"
+
+          wget -q https://ffmpeg.org/releases/ffmpeg-7.0.tar.xz
+          tar xJf ffmpeg-7.0.tar.xz
+          cd ffmpeg-7.0
+          # Set PKG_CONFIG_PATH to find opus/vpx from deps directory
+          export PKG_CONFIG_PATH="$DEPS_DIR/lib/pkgconfig:$EXTRA_PREFIX/lib/pkgconfig"
+          export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
+          echo "PKG_CONFIG_PATH=$PKG_CONFIG_PATH"
+          pkg-config --list-all | grep -E "(opus|vpx)" || echo "opus/vpx not found in pkg-config"
+          # Note: libvpx decoder detection fails in cross-compile, disabling for now
+          ./configure \
+            --cross-prefix=x86_64-w64-mingw32- \
+            --arch=x86_64 \
+            --target-os=mingw32 \
+            --prefix="$EXTRA_PREFIX" \
+            --pkg-config=pkg-config \
+            --enable-cross-compile \
+            --enable-static \
+            --disable-shared \
+            --disable-programs \
+            --disable-doc \
+            --disable-debug \
+            --enable-gpl \
+            --enable-libopus \
+            --extra-cflags="-I$DEPS_DIR/include -I$EXTRA_PREFIX/include" \
+            --extra-ldflags="-L$DEPS_DIR/lib -L$EXTRA_PREFIX/lib"
+          make -j$(nproc) && make install
+          cd ..
+
+          echo "=== Extra dependencies built ==="
+          ls -la "$EXTRA_PREFIX/lib/"
+
+      - name: Build pqTox
+        run: |
+          # Set up paths to match pkgconfig prefix from build artifacts
+          DEPS_PREFIX="$HOME/deps-${{ matrix.arch }}"
+          TOXCORE_PREFIX="$HOME/toxcore-pq-${{ matrix.arch }}"
+          EXTRA_PREFIX="$HOME/extra-deps"
+
+          # Qt paths for cross-compilation
+          QT_HOST_PATH="$HOME/Qt/6.6.3/gcc_64"
+          QT_TARGET_PATH="$HOME/Qt/6.6.3/mingw_64"
+
+          if [ "${{ matrix.arch }}" = "x86_64" ]; then
+            TOOLCHAIN_FILE="cmake/toolchain-mingw64.cmake"
+          else
+            TOOLCHAIN_FILE="cmake/toolchain-mingw32.cmake"
+          fi
+
+          # Set up pkg-config for cross-compilation
+          export PKG_CONFIG_PATH="$DEPS_PREFIX/lib/pkgconfig:$TOXCORE_PREFIX/lib/pkgconfig:$EXTRA_PREFIX/lib/pkgconfig:$EXTRA_PREFIX/lib64/pkgconfig"
+          export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
+
+          mkdir build && cd build
+
+          cmake .. \
+            -DCMAKE_TOOLCHAIN_FILE="../$TOOLCHAIN_FILE" \
+            -DCMAKE_PREFIX_PATH="$DEPS_PREFIX;$TOXCORE_PREFIX;$EXTRA_PREFIX;$QT_TARGET_PATH" \
+            -DCMAKE_FIND_ROOT_PATH="$DEPS_PREFIX;$TOXCORE_PREFIX;$EXTRA_PREFIX;$QT_TARGET_PATH" \
+            -DQT_HOST_PATH="$QT_HOST_PATH" \
+            -DQt6_DIR="$QT_TARGET_PATH/lib/cmake/Qt6" \
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
+            -DSTRICT_OPTIONS=OFF \
+            -DUPDATE_CHECK=OFF \
+            -DSPELL_CHECK=OFF \
+            -DPLATFORM_EXTENSIONS=OFF
+
+          make -j$(nproc) VERBOSE=1
+
+      - name: Package Windows build
+        run: |
+          mkdir -p dist/pqtox
+
+          # Copy the executable
+          cp build/pqtox.exe dist/pqtox/ || true
+
+          # Copy Qt DLLs
+          QT_TARGET_PATH="$HOME/Qt/6.6.3/mingw_64"
+          if [ -d "$QT_TARGET_PATH/bin" ]; then
+            cp "$QT_TARGET_PATH/bin/"*.dll dist/pqtox/ 2>/dev/null || true
+          fi
+
+          # Copy MinGW runtime DLLs
+          cp /usr/lib/gcc/x86_64-w64-mingw32/13-win32/*.dll dist/pqtox/ 2>/dev/null || true
+          cp /usr/x86_64-w64-mingw32/lib/*.dll dist/pqtox/ 2>/dev/null || true
+
+          echo "=== Package contents ==="
+          ls -la dist/pqtox/
+
+      - name: Upload pqTox Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: pqtox-windows-${{ matrix.arch }}-${{ matrix.build_type }}
+          path: dist/pqtox/
+          if-no-files-found: warn

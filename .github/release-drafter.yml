@@ -1,4 +1,35 @@
-_extends: .github
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+categories:
+  - title: 'Breaking Changes'
+    labels:
+      - 'api break'
+  - title: 'Features'
+    labels:
+      - 'enhancement'
+      - 'feature'
+  - title: 'Bug Fixes'
+    labels:
+      - 'bug'
+      - 'fix'
+  - title: 'Post-Quantum Cryptography'
+    labels:
+      - 'pq'
+      - 'post-quantum'
+  - title: 'CI/CD'
+    labels:
+      - 'ci'
+      - 'build'
+  - title: 'Other Changes'
+    labels:
+      - '*'
 
 version-resolver:
   major:
@@ -7,3 +38,12 @@ version-resolver:
   minor:
     labels:
       - 'enhancement'
+      - 'feature'
+  patch:
+    labels:
+      - 'bug'
+      - 'fix'
+  default: patch
+
+exclude-labels:
+  - 'skip-changelog'

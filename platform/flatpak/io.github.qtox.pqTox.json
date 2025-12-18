@@ -1,10 +1,10 @@
 {
-  "app-id": "io.github.qtox.qTox",
+  "app-id": "io.github.qtox.pqTox",
   "runtime": "org.kde.Platform",
   "sdk": "org.kde.Sdk",
   "runtime-version": "6.8",
-  "command": "qtox",
-  "rename-icon": "qtox",
+  "command": "pqtox",
+  "rename-icon": "pqtox",
   "finish-args": [
     "--share=network",
     "--socket=pulseaudio",
@@ -89,7 +89,7 @@
       ]
     },
     {
-      "name": "qTox",
+      "name": "pqTox",
       "buildsystem": "cmake-ninja",
       "config-opts": ["-DSVGZ_ICON=OFF", "-DSTRICT_OPTIONS=ON"],
       "sources": [

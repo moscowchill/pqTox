@@ -61,3 +61,5 @@ target/
 /.lsp_tidy_cache
 /third_party/ci-tools
 /third_party/deps
+build/
+.claude/

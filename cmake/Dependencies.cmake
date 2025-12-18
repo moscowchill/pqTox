@@ -168,10 +168,43 @@ if (NOT TOXCORE_FOUND)
   search_dependency(TOXAV           PACKAGE libtoxav)
 endif()
 
+# Search for libsodium AFTER toxcore (correct link order: dependents before dependencies)
+search_dependency(LIBSODIUM         PACKAGE libsodium)
+
 # Check for post-quantum toxcore support
 # PQ toxcore adds ML-KEM-768 + X25519 hybrid key exchange
 include(CheckSymbolExists)
-set(CMAKE_REQUIRED_LIBRARIES ${TOXCORE_LIBRARIES})
+
+# Debug: show what we're working with
+message(STATUS "PQ detection - TOXCORE_LIBRARIES: ${TOXCORE_LIBRARIES}")
+message(STATUS "PQ detection - TOXCORE_INCLUDE_DIRS: ${TOXCORE_INCLUDE_DIRS}")
+message(STATUS "PQ detection - TOXCORE_LIBRARY_DIRS: ${TOXCORE_LIBRARY_DIRS}")
+message(STATUS "PQ detection - LIBSODIUM_LIBRARIES: ${LIBSODIUM_LIBRARIES}")
+message(STATUS "PQ detection - LIBSODIUM_LIBRARY_DIRS: ${LIBSODIUM_LIBRARY_DIRS}")
+
+# Find the actual library files for proper symbol detection
+# pkg-config gives us library names, but check_symbol_exists needs paths
+find_library(TOXCORE_LIBRARY_PATH
+  NAMES toxcore
+  HINTS ${TOXCORE_LIBRARY_DIRS}
+  NO_DEFAULT_PATH)
+if(NOT TOXCORE_LIBRARY_PATH)
+  find_library(TOXCORE_LIBRARY_PATH NAMES toxcore)
+endif()
+
+find_library(LIBSODIUM_LIBRARY_PATH
+  NAMES sodium
+  HINTS ${LIBSODIUM_LIBRARY_DIRS}
+  NO_DEFAULT_PATH)
+if(NOT LIBSODIUM_LIBRARY_PATH)
+  find_library(LIBSODIUM_LIBRARY_PATH NAMES sodium)
+endif()
+
+message(STATUS "PQ detection - TOXCORE_LIBRARY_PATH: ${TOXCORE_LIBRARY_PATH}")
+message(STATUS "PQ detection - LIBSODIUM_LIBRARY_PATH: ${LIBSODIUM_LIBRARY_PATH}")
+
+# Use full library paths for symbol detection (more reliable than -L flags)
+set(CMAKE_REQUIRED_LIBRARIES ${TOXCORE_LIBRARY_PATH} ${LIBSODIUM_LIBRARY_PATH})
 set(CMAKE_REQUIRED_INCLUDES ${TOXCORE_INCLUDE_DIRS})
 
 check_symbol_exists(tox_friend_get_identity_status "tox/tox.h" HAVE_TOX_PQ_IDENTITY)
@@ -190,7 +223,6 @@ endif()
 unset(CMAKE_REQUIRED_LIBRARIES)
 unset(CMAKE_REQUIRED_INCLUDES)
 
-search_dependency(LIBSODIUM         PACKAGE libsodium)
 search_dependency(OPUS              PACKAGE opus)
 search_dependency(VPX               PACKAGE vpx)
 
@@ -225,6 +257,11 @@ endif()
 
 if(WIN32)
   add_dependency(strmiids)
+  # Windows API libraries for toxcore and OpenAL
+  add_dependency(iphlpapi)  # GetAdaptersInfo for toxcore LAN discovery
+  add_dependency(winmm)     # waveOut/waveIn for OpenAL audio
+  add_dependency(ws2_32)    # Winsock for networking
+  add_dependency(crypt32)   # Crypto API
   # Qt doesn't provide openssl on windows
   search_dependency(OPENSSL           PACKAGE openssl)
 endif()
